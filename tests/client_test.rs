@@ -45,7 +45,7 @@ fn projects_filtered() {
         !projects.is_empty(),
         "should find outdated python packages in debian_12"
     );
-    for (_name, packages) in &projects {
+    for packages in projects.values() {
         assert!(!packages.is_empty());
         assert!(
             packages
