@@ -50,12 +50,18 @@ impl RepologyBlockingClient {
         #[builder(into, default = "https://repology.org/api/v1".to_owned())] base_url: String,
         #[builder(default = Duration::from_secs(1))] rate_limit: Duration,
         reqwest_client: Option<reqwest::Client>,
+        #[builder(default = 3)] max_retries: usize,
+        #[builder(default = Duration::from_secs(1))] min_backoff: Duration,
+        #[builder(default = Duration::from_secs(60))] max_backoff: Duration,
     ) -> Result<Self> {
         let inner = crate::RepologyClient::builder()
             .user_agent(user_agent)
             .base_url(base_url)
             .rate_limit(rate_limit)
             .maybe_reqwest_client(reqwest_client)
+            .max_retries(max_retries)
+            .min_backoff(min_backoff)
+            .max_backoff(max_backoff)
             .build()?;
 
         let rt = tokio::runtime::Runtime::new()

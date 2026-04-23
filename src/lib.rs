@@ -33,7 +33,7 @@ mod filter;
 pub mod models;
 
 pub use blocking::RepologyBlockingClient;
-pub use client::RepologyClient;
+pub use client::{RepologyClient, RetryConfig};
 pub use error::{Error, Result};
 pub use filter::ProjectFilter;
 pub use models::{Package, PackageStatus, Problem, ProblemType};
