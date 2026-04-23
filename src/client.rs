@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::time::{Duration, Instant};
 
 use futures_core::Stream;
 use tokio::sync::Mutex;
+
+type BoxStream<'a, T> = Pin<Box<dyn Stream<Item = T> + 'a>>;
 
 use crate::error::{Error, Result};
 use crate::filter::ProjectFilter;
@@ -156,7 +159,7 @@ impl RepologyClient {
     pub async fn projects(&self, filter: &ProjectFilter) -> Result<HashMap<String, Vec<Package>>> {
         use tokio_stream::StreamExt;
         let mut all = HashMap::new();
-        let mut stream = std::pin::pin!(self.projects_iter(filter));
+        let mut stream = self.projects_iter(filter);
         while let Some(result) = stream.next().await {
             let (name, packages) = result?;
             all.insert(name, packages);
@@ -171,8 +174,8 @@ impl RepologyClient {
     pub fn projects_iter<'a>(
         &'a self,
         filter: &'a ProjectFilter,
-    ) -> impl Stream<Item = Result<(String, Vec<Package>)>> + 'a {
-        async_stream::try_stream! {
+    ) -> BoxStream<'a, Result<(String, Vec<Package>)>> {
+        Box::pin(async_stream::try_stream! {
             let mut cursor: Option<String> = None;
 
             loop {
@@ -201,7 +204,7 @@ impl RepologyClient {
 
                 cursor = last_name;
             }
-        }
+        })
     }
 
     /// Fetch a single page of projects (up to ~200).
@@ -226,7 +229,7 @@ impl RepologyClient {
     pub async fn repository_problems(&self, repository: &str) -> Result<Vec<Problem>> {
         use tokio_stream::StreamExt;
         let mut all = Vec::new();
-        let mut stream = std::pin::pin!(self.repository_problems_iter(repository));
+        let mut stream = self.repository_problems_iter(repository);
         while let Some(result) = stream.next().await {
             all.push(result?);
         }
@@ -241,8 +244,8 @@ impl RepologyClient {
     pub fn repository_problems_iter<'a>(
         &'a self,
         repository: &'a str,
-    ) -> impl Stream<Item = Result<Problem>> + 'a {
-        async_stream::try_stream! {
+    ) -> BoxStream<'a, Result<Problem>> {
+        Box::pin(async_stream::try_stream! {
             let mut cursor: Option<String> = None;
 
             loop {
@@ -262,7 +265,7 @@ impl RepologyClient {
                     break;
                 }
             }
-        }
+        })
     }
 
     /// Fetch a single page of problems for a repository.
@@ -297,7 +300,7 @@ impl RepologyClient {
     ) -> Result<Vec<Problem>> {
         use tokio_stream::StreamExt;
         let mut all = Vec::new();
-        let mut stream = std::pin::pin!(self.maintainer_problems_iter(maintainer, repository));
+        let mut stream = self.maintainer_problems_iter(maintainer, repository);
         while let Some(result) = stream.next().await {
             all.push(result?);
         }
@@ -313,8 +316,8 @@ impl RepologyClient {
         &'a self,
         maintainer: &'a str,
         repository: &'a str,
-    ) -> impl Stream<Item = Result<Problem>> + 'a {
-        async_stream::try_stream! {
+    ) -> BoxStream<'a, Result<Problem>> {
+        Box::pin(async_stream::try_stream! {
             let mut cursor: Option<String> = None;
 
             loop {
@@ -334,7 +337,7 @@ impl RepologyClient {
                     break;
                 }
             }
-        }
+        })
     }
 
     /// Fetch a single page of problems for a maintainer in a repository.
