@@ -5,6 +5,8 @@ use std::time::{Duration, Instant};
 use futures_core::Stream;
 use tokio::sync::Mutex;
 
+type BoxStream<'a, T> = Pin<Box<dyn Stream<Item = T> + 'a>>;
+
 use crate::error::{Error, Result};
 use crate::filter::ProjectFilter;
 use crate::models::{Package, Problem};
@@ -172,7 +174,7 @@ impl RepologyClient {
     pub fn projects_iter<'a>(
         &'a self,
         filter: &'a ProjectFilter,
-    ) -> Pin<Box<dyn Stream<Item = Result<(String, Vec<Package>)>> + 'a>> {
+    ) -> BoxStream<'a, Result<(String, Vec<Package>)>> {
         Box::pin(async_stream::try_stream! {
             let mut cursor: Option<String> = None;
 
@@ -242,7 +244,7 @@ impl RepologyClient {
     pub fn repository_problems_iter<'a>(
         &'a self,
         repository: &'a str,
-    ) -> Pin<Box<dyn Stream<Item = Result<Problem>> + 'a>> {
+    ) -> BoxStream<'a, Result<Problem>> {
         Box::pin(async_stream::try_stream! {
             let mut cursor: Option<String> = None;
 
@@ -314,7 +316,7 @@ impl RepologyClient {
         &'a self,
         maintainer: &'a str,
         repository: &'a str,
-    ) -> Pin<Box<dyn Stream<Item = Result<Problem>> + 'a>> {
+    ) -> BoxStream<'a, Result<Problem>> {
         Box::pin(async_stream::try_stream! {
             let mut cursor: Option<String> = None;
 
