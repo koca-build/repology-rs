@@ -412,7 +412,7 @@ impl RepologyClient {
 
 fn is_retryable(err: &Error) -> bool {
     match err {
-        Error::Http(e) => e.is_connect() || e.is_timeout() || e.is_request(),
+        Error::Http(e) => e.is_connect() || e.is_timeout(),
         Error::Api { status, .. } => {
             status.is_server_error() || *status == reqwest::StatusCode::TOO_MANY_REQUESTS
         }
