@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::pin::Pin;
 use std::time::{Duration, Instant};
 
+use backon::{ExponentialBuilder, Retryable};
 use futures_core::Stream;
 use tokio::sync::Mutex;
 
@@ -13,6 +14,28 @@ use crate::models::{Package, Problem};
 
 const DEFAULT_BASE_URL: &str = "https://repology.org/api/v1";
 
+/// Configuration for automatic retry with exponential backoff.
+#[derive(Debug, Clone)]
+pub struct RetryConfig {
+    /// Maximum number of retry attempts (not counting the initial attempt).
+    /// Set to 0 to disable retries.
+    pub max_retries: usize,
+    /// Initial backoff duration before the first retry.
+    pub min_backoff: Duration,
+    /// Maximum backoff duration cap.
+    pub max_backoff: Duration,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            min_backoff: Duration::from_secs(1),
+            max_backoff: Duration::from_secs(60),
+        }
+    }
+}
+
 /// Async client for the [Repology API](https://repology.org/api/v1).
 ///
 /// Constructed via [`RepologyClient::new`] or [`RepologyClient::builder`].
@@ -23,6 +46,7 @@ pub struct RepologyClient {
     base_url: String,
     rate_limit: Duration,
     last_request: Mutex<Option<Instant>>,
+    retry_config: RetryConfig,
 }
 
 impl RepologyClient {
@@ -65,6 +89,9 @@ impl RepologyClient {
         #[builder(into, default = DEFAULT_BASE_URL.to_owned())] base_url: String,
         #[builder(default = Duration::from_secs(1))] rate_limit: Duration,
         reqwest_client: Option<reqwest::Client>,
+        #[builder(default = 3)] max_retries: usize,
+        #[builder(default = Duration::from_secs(1))] min_backoff: Duration,
+        #[builder(default = Duration::from_secs(60))] max_backoff: Duration,
     ) -> Result<Self> {
         if user_agent.is_empty() {
             return Err(Error::Config(
@@ -80,11 +107,18 @@ impl RepologyClient {
                 .map_err(Error::Http)?,
         };
 
+        let retry_config = RetryConfig {
+            max_retries,
+            min_backoff,
+            max_backoff,
+        };
+
         Ok(Self {
             http,
             base_url,
             rate_limit,
             last_request: Mutex::new(None),
+            retry_config,
         })
     }
 }
@@ -107,6 +141,19 @@ impl RepologyClient {
     }
 
     async fn get(&self, url: &str) -> Result<reqwest::Response> {
+        let backoff = ExponentialBuilder::new()
+            .with_min_delay(self.retry_config.min_backoff)
+            .with_max_delay(self.retry_config.max_backoff)
+            .with_max_times(self.retry_config.max_retries)
+            .with_jitter();
+
+        (|| self.get_once(url))
+            .retry(backoff)
+            .when(is_retryable)
+            .await
+    }
+
+    async fn get_once(&self, url: &str) -> Result<reqwest::Response> {
         self.rate_limit().await;
         let resp = self.http.get(url).send().await.map_err(Error::Http)?;
 
@@ -360,6 +407,16 @@ impl RepologyClient {
             url.push_str(&format!("?start={}", urlencoding(start)));
         }
         self.get_json(&url).await
+    }
+}
+
+fn is_retryable(err: &Error) -> bool {
+    match err {
+        Error::Http(e) => e.is_connect() || e.is_timeout(),
+        Error::Api { status, .. } => {
+            status.is_server_error() || *status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        }
+        _ => false,
     }
 }
 
