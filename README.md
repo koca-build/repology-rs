@@ -51,7 +51,7 @@ Methods like `projects()` and `repository_problems()` auto-paginate through all 
 // Lazy streaming (async)
 use tokio_stream::StreamExt;
 
-let mut stream = std::pin::pin!(client.projects_iter(&filter));
+let mut stream = client.projects_iter(&filter);
 while let Some(result) = stream.next().await {
     let (name, packages) = result?;
     println!("{name}");
